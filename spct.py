@@ -12,11 +12,11 @@ t : observed time. 1-d vector.
 x(t): observed value. 1-d vector
 
 """
-def lomb_scargle(t, x, n, nout = 0, dfreq = 0, alarm_rate = 0.01):
+def lomb_scargle(t, x, n, nout = -1, dfreq = -1, alarm_rate = 0.01):
     
-    if nout ==0:
+    if nout == -1:
         nout = 4*n
-    if dfreq == 0:
+    if dfreq == -1:
         dt = t[n-1]-t[0]
         f_ny = 0.5*n/dt
         dfreq = f_ny/nout
@@ -46,11 +46,13 @@ def lomb_scargle(t, x, n, nout = 0, dfreq = 0, alarm_rate = 0.01):
     s2 = np.dot(s**2, e.reshape([n, 1]))
     c2 = np.dot(c**2, e.reshape([n, 1]))
     
-    sigma = (y2 - y1**2/n)/n
+    sigma = (np.float64(y2) - np.float64(y1)**2/n)/n
     p = 0.5*(cy**2/c2 + sy**2/s2)
-
-    ssl = -np.log(1-(1-alarm_rate)**(1/n))*sigma
+    amp = np.sqrt(cy**2/c2**2 + sy**2/s2**2)
     
-    res = {"freq": freq.reshape([nout]), "pl": p.reshape([nout]), "ssl": ssl}
+    ssl = -np.log(1-(1-alarm_rate)**(1/np.float64(n)))*sigma
+    alpha = (1-np.exp(-p/sigma))**n
+    
+    res = {"freq": freq.reshape([nout]), "pl": p.reshape([nout]), "ssl": ssl, "sigma": sigma, "significance_rate":alpha.reshape([nout]), "amp": amp.reshape([nout])}
     
     return res
