@@ -8,6 +8,7 @@ import algebra
 import corr
 import vcodataio
 import time
+import fit
 
 """
 Input:
@@ -31,28 +32,7 @@ Here, we assume the wind velocity are within 50-150 m/s (zonal) and -30-30 m/s (
 This is why the longitudes of search areas are variable along latitude.
 
 """
-def func_fit(x, a, b, c, d, e):
-    return np.arctanh(a*np.exp(-0.5*((x-b)/c)**2))+d+e*x
-def FitCC(x, y, err, maxind):
-    initial_guess = [y[maxind], x[maxind], 10, 0, 0]
-    # print(x, y)
-    # print(initial_guess)
-    rng = np.arange(maxind-30, maxind+30)
-    # plt.plot(x[rng], y[rng])
-    # plt.plot(x, y)
-    # print(x[rng], y[rng], err[rng])
-    # print(func_fit(x[rng], np.max(y), x[maxind], 1, 0))
-    try:
-        res = curve_fit(func_fit, x[rng], y[rng], sigma=err[rng],
-                        p0=initial_guess, bounds=([-np.inf, x.min(), 0., -10., -np.inf], [np.inf, x.max(), 100, 10., np.inf]))
-        param = res[0]
-        perr = np.sqrt(np.diag(res[1]))
-    except RuntimeError:
-        param = [np.NaN for i in range(5)]
-        perr  = [np.NaN for i in range(5)]
-    # plt.plot(func_fit(np.arange(150), param[0], param[1], param[2], param[3], param[4]), "--")
-    # plt.show()
-    return param[1], perr[1]
+
 class CloudTracking():
     class DataForCloudTracking():
         pass
@@ -110,10 +90,10 @@ class CloudTracking():
         xind, yind: indices of the templates
         theta = determined orientation
         """
-        r    = [[[np.array([])]*(self.xdivision-1) for i in range(self.ydivision-1)] for j in range(self.nsp-1)]
-        xind = [[[np.array([])]*(self.xdivision-1) for i in range(self.ydivision-1)] for j in range(self.nsp)]
-        yind = [[[np.array([])]*(self.xdivision-1) for i in range(self.ydivision-1)] for j in range(self.nsp)]
-        theta=  [[np.array([])]*(self.xdivision-1) for i in range(self.ydivision-1)]
+        r    = [[[np.NaN]*(self.xdivision-1) for i in range(self.ydivision-1)] for j in range(self.nsp-1)]
+        xind = [[[np.NaN]*(self.xdivision-1) for i in range(self.ydivision-1)] for j in range(self.nsp)]
+        yind = [[[np.NaN]*(self.xdivision-1) for i in range(self.ydivision-1)] for j in range(self.nsp)]
+        theta=  [[np.NaN]*(self.xdivision-1) for i in range(self.ydivision-1)]
 
         for mx in range(self.xdivision-1):
             for my in range(self.ydivision-1):
@@ -123,11 +103,12 @@ class CloudTracking():
                     rad=[]
                     """Cut out templates"""
                     for ti in range(self.nsp):
-                        sy_ti = self.sy*round(self.data.times[ti]-self.data.times[0])
-                        sx_ti = self.sx[my]*round(self.data.times[ti]-self.data.times[0])
-
-                        yindi = np.linspace(minlat-sy_ti, minlat+sy_ti+self.tsize-1, self.tsize+sy_ti*2).astype(np.int64)
-                        xindi = np.linspace(minlon-sx_ti, minlon+self.tsize-1, self.tsize+sx_ti).astype(np.int64)
+                        sy_ti = int(self.sy*round(self.data.times[ti]-self.data.times[0]))
+                        sx_ti = int(self.sx[my]*round(self.data.times[ti]-self.data.times[0]))
+                        yindi = np.arange(minlat-sy_ti, minlat+sy_ti+self.tsize)
+                        xindi = np.arange(minlon-sx_ti, minlon+self.tsize)
+                        # yindi = np.linspace(minlat-sy_ti, minlat+sy_ti+self.tsize-1, self.tsize+sy_ti*2).astype(np.int64)
+                        # xindi = np.linspace(minlon-sx_ti, minlon+self.tsize-1, self.tsize+sx_ti).astype(np.int64)
                         #nxを超えたら0へ回るようにする
                         xindi = np.where(xindi >= self.data.nx, xindi-self.data.nx, xindi)
                         radi = self.data.radiances[ti][yindi][:,xindi]
@@ -145,12 +126,12 @@ class CloudTracking():
                         else:
                             theta[my][mx] = None
 
-                        xind[ti][my][mx] = xindi
-                        yind[ti][my][mx] = yindi
+                        xind[ti][my][mx] = xindi.tolist()
+                        yind[ti][my][mx] = yindi.tolist()
                         rad.append(radi)
 
                     for i in range(self.nsp-1):
-                        r[i][my][mx] = corr.CrossCorr2(rad[0], rad[i+1])
+                        r[i][my][mx] = corr.CrossCorr2(rad[0], rad[i+1]).tolist()
         self.res.theta = theta
         self.res.cc = r
         self.res.xind = xind
@@ -162,18 +143,18 @@ class CloudTracking():
         The region where obtained CCSs were 0 or 1 was ignored (fill blank ndarray).
         """
 
-        selec = [[[1 if cc.ndim==2 else 0 for cc in cc_ti_row] for cc_ti_row in cc_ti] for cc_ti in self.res.cc]
+        selec = [[[1 if np.array(cc).ndim==2 else 0 for cc in cc_ti_row] for cc_ti_row in cc_ti] for cc_ti in self.res.cc]
         selec = np.where(np.array(selec).sum(axis=0)==2)
         selec = np.array([selec[0], selec[1]]).transpose()
-        cc_tsp = [[np.array([])]*(self.xdivision-1) for i in range(self.ydivision-1)]
+        res_cc_tsp = [[np.NaN]*(self.xdivision-1) for i in range(self.ydivision-1)]
 
         for my, mx in selec:
-            cc_tsp[my][mx] = self.res.cc[-1][my][mx][:]
-            xsize_tsp = cc_tsp[my][mx].shape[1]
-            ysize_tsp = cc_tsp[my][mx].shape[0]
+            cc_tsp = np.array(self.res.cc[-1][my][mx][:])
+            xsize_tsp = cc_tsp.shape[1]
+            ysize_tsp = cc_tsp.shape[0]
 
             for ti in range(0,self.nsp-2):
-                cc = self.res.cc[ti][my][mx][:]
+                cc = np.array(self.res.cc[ti][my][mx][:])
                 xsize = cc.shape[1]
                 ysize = cc.shape[0]
                 x = np.arange(xsize)
@@ -184,10 +165,11 @@ class CloudTracking():
                 cc_resize = interp2d(x, y, cc)(new_x, new_y)
 
                 #superpose
-                cc_tsp[my][mx] += cc_resize
-            cc_tsp[my][mx]/= self.nsp-1
+                cc_tsp += cc_resize
+            cc_tsp /= self.nsp-1
+            res_cc_tsp[my][mx] = cc_tsp.tolist()
 
-        self.res.cc_tsp=cc_tsp
+        self.res.cc_tsp=res_cc_tsp
 
     def RegionOfInterest(self):
         roi = []
@@ -216,15 +198,14 @@ class CloudTracking():
         p = [[0 for i in range(xdivision-1)] for j in range(ydivision-1)]
         for x in range(xdivision-1):
             for y in range(ydivision-1):
-                cc = self.res.cc_tsp[y][x]
+                cc = np.array(self.res.cc_tsp[y][x])
                 if isinstance(cc, np.ndarray):
                     if cc.ndim==2:
                         candidates[y][x] = algebra.FindPeaks2d(cc, roi=self.roi[y], thresh=thresh)
                         p[y][x] = cc[candidates[y][x]]
                     else:
                         candidates[y][x] = (np.array([]), np.array([]))
-                        p[y][x] = cc[:]
-
+                        p[y][x] = np.array([])
         p_pre = copy.deepcopy(p)
         opt_u = np.zeros([ydivision-1, xdivision-1])
         opt_v = np.zeros([ydivision-1, xdivision-1])
@@ -291,10 +272,11 @@ class CloudTracking():
                     img1 = self.data.radiances[0][self.res.yind[0][my][mx]][:,self.res.xind[0][my][mx]]
                     theta = self.res.theta[my][mx]
                     if theta: img1 = corr.dif_img_along_streak(img1, theta)
+                    cc_n = np.array(self.res.cc[-1][my][mx])
                     for i in range(self.nsp-1):
-                        cc = self.res.cc[i][my][mx]
-                        uind = self.res.cc[i][my][mx].shape[1]/self.res.cc[-1][my][mx].shape[1]*self.res.u_grid[my][mx]
-                        vind = self.res.cc[i][my][mx].shape[0]/self.res.cc[-1][my][mx].shape[0]*self.res.v_grid[my][mx]
+                        cc = np.array(self.res.cc[i][my][mx])
+                        uind = cc.shape[1]/cc_n.shape[1]*self.res.u_grid[my][mx]
+                        vind = cc.shape[0]/cc_n.shape[0]*self.res.v_grid[my][mx]
                         uinds.append(int(uind))
                         vinds.append(int(vind))
                         ccs.append(cc)
@@ -351,18 +333,11 @@ class CloudTracking():
                     sp_err_x = np.sqrt(sp_err_x)
                     sp_err_y = np.sqrt(sp_err_y)
                     """sub-pixel estimation with non-linear least square fitting"""
-                    # print(u_grid, v_grid)
-                    cc_tsp = self.res.cc_tsp[my][mx]
+                    cc_tsp = np.array(self.res.cc_tsp[my][mx])
                     nccy, nccx = cc_tsp.shape
-                    # plt.plot(np.arange(nccx), cc_tsp[int(v_grid)])
-                    # plt.show()
-                    # print(mx, my)
-                    # tt = time.time()
-                    usub[my, mx], uerr[my, mx] = FitCC(np.arange(nccx), cc_tsp[int(v_grid)], sp_err_x, int(u_grid))
-                    vsub[my, mx], verr[my, mx] = FitCC(np.arange(nccy), cc_tsp[:,int(u_grid)], sp_err_y, int(v_grid))
-                    # print(time.time()-tt)
-                    # usub[my, mx], uerr[my, mx] = FitCC(np.arange(nccx), cc_tsp[int(v_grid)], sp_err[int(v_grid)], int(u_grid))
-                    # vsub[my, mx], verr[my, mx] = FitCC(np.arange(nccy), cc_tsp[:,int(u_grid)], sp_err[:,int(u_grid)], int(v_grid))
+
+                    usub[my, mx], uerr[my, mx] = fit.FitCC(np.arange(nccx), cc_tsp[int(v_grid)], sp_err_x, int(u_grid))
+                    vsub[my, mx], verr[my, mx] = fit.FitCC(np.arange(nccy), cc_tsp[:,int(u_grid)], sp_err_y, int(v_grid))
                 else:
                     usub[my, mx], uerr[my, mx], vsub[my, mx], verr[my, mx] = np.NaN, np.NaN, np.NaN, np.NaN
         self.res.u_sub_grid = usub
