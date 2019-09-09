@@ -3,7 +3,6 @@ from scipy.optimize import minimize
 from scipy.interpolate import griddata
 from scipy.ndimage.interpolation import shift
 import time
-from numba import jit
 
 def displace_axes(dx, dy):
     #x: 要素0番目が西向き最大変位
