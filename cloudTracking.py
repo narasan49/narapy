@@ -191,7 +191,7 @@ class CloudTracking():
             roi.append(roi_y)
         self.roi = roi
 
-    def Relaxation(self, a=0.2, d=1.0, thresh=0.3):
+    def Relaxation(self, a=0.2, d=1.0, thresh=0.2):
         xdivision = self.xdivision
         ydivision = self.ydivision
         candidates = [[0 for i in range(xdivision-1)] for j in range(ydivision-1)]
