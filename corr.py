@@ -4,98 +4,18 @@ from scipy.interpolate import griddata
 from scipy.ndimage.interpolation import shift
 import time
 
-def displace_axes(dx, dy):
-    #x: 要素0番目が西向き最大変位
-    #y: 要素0番目が南向き最大変位
-    x = np.arange(-dx,0)
-    y = np.arange(-dy/2,dy/2) #y軸+-に同じだけ探索すると、2画像のy軸要素数の偶奇は同じになる。・・・差は２で割れる
-
-    return x, y
-
-def CC(img1, img2, cnt):
-    n = img1.shape[0]
-    ones = np.ones([n])
-    nv = np.correlate(ones, cnt, mode="same")
-
-    fg = np.correlate(img2, img1, mode="same")
-    #fg[0]の計算に使っているimg1は
-    #img1[0:n/2]
-    #この分散を知りたい
-
-    fsum = np.correlate(ones, img1, mode="same")
-    f2sum= np.correlate(ones, img1*img1, mode="same")
-    gsum = np.correlate(img2, ones, mode="same")
-    g2sum= np.correlate(img2*img2, ones, mode="same")
-
-    cov  = fg - fsum*gsum/nv
-    fvar = f2sum-fsum**2/nv
-    gvar = g2sum-gsum**2/nv
-    print(cov[n//4:n//2])
-    print(nv[n//4:n//2])
-    print(fvar[n//4:n//2])
-    print(gvar[n//4:n//2])
-
-    ff = np.correlate(img1, img1, mode="same")
-    #gg = np.correlate(img2, img2, mode="same")
-    #これは自己相関
-    #ff[0]は
-    #f[0]*f[n/2]+f[1]*f[n/2+1]+...+f[n/2-1]*f[n-1]
-#     print(ff[n//2])
-
-    return cov/np.sqrt(fvar*gvar)
-
-# def cross_correlation_coefficient():
-#     for xi in range(0,nx2-nx1):
-#         for yj in range(0,ny2-ny1):
-#             for i in range(
-#             cc[j,i] =
-#             img2_cut = img2[0+j:ny1+j, 0+i:nx1+i]
-#             c = np.corrcoef(img1.reshape([nx1*ny1]), img2_cut.reshape([nx1*ny1]))
-#             cc[j,i] = c[0,1]
-
-
 """
 CrossCorr:小領域の雲追跡
 img1: 追跡に用いる画像
 img2: 探索領域
 """
-def CrossCorr(img1, img2):
-    nx1 = img1.shape[1]
-    ny1 = img1.shape[0]
-    nx2 = img2.shape[1]
-    ny2 = img2.shape[0]
-    n = nx1*ny1
-
-#     t1 = time.time()
-    cc = np.zeros([ny2-ny1, nx2-nx1])
-    for i in range(0,nx2-nx1):
-        for j in range(0,ny2-ny1):
-            img2_cut = img2[0+j:ny1+j, 0+i:nx1+i]
-            c = np.corrcoef(img1.reshape([nx1*ny1]), img2_cut.reshape([nx1*ny1]))
-            cc[j,i] = c[0,1]
-
-#     print(time.time()-t1)
-    return cc
-
-"""
-1より5倍くらい早くなった
-"""
-# @jit
-def CorrInCorr2(img1_pad,img1_pad_bi, img2_1d):
-    Simg22    = np.correlate(img2_1d**2, img1_pad_bi)
-    Simg2     = np.correlate(img2_1d, img1_pad_bi)
-    Simg1img2 = np.correlate(img2_1d, img1_pad)
-    return Simg22, Simg2, Simg1img2
 
 def CorrInCorr2FFT(img1_pad,img1_pad_bi, img2_1d):
-#     t2 = time.time()
     n2 = img2_1d.shape[0]
     n1 = img1_pad.shape[0]
     img1_pad_pad = np.zeros_like(img2_1d)
-#     img1_pad_pad[(n2-n1)//2:(n2-n1)//2+n1] = img1_pad
     img1_pad_pad[0:n1] = img1_pad
     img1_pad_bi_pad = np.zeros_like(img2_1d)
-#     img1_pad_bi_pad[(n2-n1)//2:(n2-n1)//2+n1] = img1_pad_bi
     img1_pad_bi_pad[0:n1] = img1_pad_bi
 
     fft_img2_1d = np.fft.fft(img2_1d)
@@ -109,7 +29,6 @@ def CorrInCorr2FFT(img1_pad,img1_pad_bi, img2_1d):
     Simg2 = Simg2[:(n2-n1+1)]
     Simg22 = Simg22[:(n2-n1+1)]
     Simg1img2 = Simg1img2[:(n2-n1+1)]
-#     print(time.time()-t2)
     return Simg22, Simg2, Simg1img2
 
 def CrossCorr2(img1, img2):
@@ -124,14 +43,9 @@ def CrossCorr2(img1, img2):
     Simg12=np.sum(img1.reshape([-1])**2)
     Simg1=np.sum(img1.reshape([-1]))
 
-#     t1 = time.time()
-#     Simg22, Simg2, Simg1img2 = CorrInCorr2(img1_pad, img1_pad_bi, img2_1d)
-
     Simg22, Simg2, Simg1img2 = CorrInCorr2FFT(img1_pad, img1_pad_bi, img2_1d)
-#     print(time.time()-t1)
     cov1 = Simg12 - Simg1**2/n + 1.0e-20 #0割りを防ぐために極小値を加算
     cov2 = Simg22 - Simg2**2/n + 1.0e-20
-#     print(cov2)
     cov12 = Simg1img2 - Simg1*Simg2/n
     c = cov12/np.sqrt(cov1*cov2)
     c = c[:-1]
