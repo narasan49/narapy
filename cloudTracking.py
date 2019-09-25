@@ -116,11 +116,7 @@ class CloudTracking():
                         radi = nd.gaussian_filter(radi, [5,5])
                         if dif_streak:
                             if ti==0:
-                                if my==0:
-                                    theta[my][mx] = corr.orientation(radi)
-                                else:
-                                    #initial guess is set to be the solution of previous iteration
-                                    theta[my][mx] = corr.orientation(radi, theta0=theta[my-1][mx])
+                                theta[my][mx] = corr.orientation(radi)
                             #differentiate
                             radi = corr.dif_img_along_streak(radi, theta[my][mx])
                         else:

@@ -58,18 +58,18 @@ def eval_func(theta, img):
     var = np.nanvar(dif)
     return var
 
-def orientation(img, theta0=None):
+def orientation(img):
 
-    if not theta0:
-        #局所解を避けるため0~piを10分割してその中から初期値を決める。
-        #10個の初期値の評価関数を比較
-        theta0_cand = np.linspace(0.4, 0.6, 10)*np.pi
-        phi0_cand   = np.zeros([10])
-        for i in range(0,10):
-            phi0_cand[i] = eval_func(theta0_cand[i], img)
+    # if not theta0:
+    #局所解を避けるため0~piを10分割してその中から初期値を決める。
+    #10個の初期値の評価関数を比較
+    theta0_cand = np.linspace(0.4, 0.6, 10)*np.pi
+    phi0_cand   = np.zeros([10])
+    for i in range(0,10):
+        phi0_cand[i] = eval_func(theta0_cand[i], img)
 
-        theta0_ind = np.argmin(phi0_cand)
-        theta0 = theta0_cand[theta0_ind]
+    theta0_ind = np.argmin(phi0_cand)
+    theta0 = theta0_cand[theta0_ind]
     #評価関数の最小化
     theta = minimize(eval_func, theta0, args=(img), method='Nelder-Mead')
     res = theta.x[0]
